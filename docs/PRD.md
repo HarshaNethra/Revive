@@ -1,12 +1,12 @@
 # Self-Healing AWS Infrastructure Platform
 
-## Product Requirements Document (PRD)
+## Product Requirements Document
 
-**Project Type:** Cloud Infrastructure / DevOps / SRE  
+**Project Type:** Cloud Infrastructure / DevOps / SRE / Backend  
 **Primary Cloud:** AWS  
-**Project Scope:** EC2, Lambda, S3  
-**Primary Objective:** Automatically detect, diagnose, remediate, and verify predefined failures across multiple AWS services  
-**Status:** Development
+**Supported Resources:** EC2, Lambda, S3  
+**Primary Database:** Amazon DynamoDB  
+**Primary Goal:** Build a generalized self-healing infrastructure platform capable of detecting, diagnosing, remediating, and verifying failures across multiple AWS services.
 
 ---
 
@@ -20,45 +20,16 @@ Examples include:
 
 - EC2 applications or processes becoming unresponsive.
 - EC2 memory or disk utilization reaching critical levels.
-- Lambda functions experiencing abnormal error rates or execution failures.
-- S3 buckets becoming misconfigured or violating defined security policies.
+- Lambda functions experiencing abnormal error rates.
+- S3 buckets violating defined security or configuration policies.
 
-Traditional infrastructure operations often require engineers to manually identify the problem, investigate the cause, execute a recovery action, and verify that the system has recovered.
+Traditional operations require engineers to manually detect the issue, investigate it, perform recovery, and verify the result.
 
-This increases recovery time and can result in unnecessary downtime, security exposure, or operational overhead.
+This increases recovery time and operational overhead.
 
-The goal of this project is to build a **generalized AWS Self-Healing Infrastructure Platform** that can monitor multiple AWS services and automatically perform predefined recovery actions.
+The goal of this project is to build a **generalized Self-Healing Infrastructure Platform** that automatically detects predefined failures, diagnoses them, performs approved remediation actions, verifies recovery, and records the complete incident lifecycle.
 
----
-
-# 2. Product Vision
-
-The platform should implement a common self-healing lifecycle:
-
-```text
-Detect
-  ↓
-Identify Resource
-  ↓
-Diagnose
-  ↓
-Select Healing Policy
-  ↓
-Remediate
-  ↓
-Verify
-  ↓
-Record Incident
-  ↓
-Notify
-```
-
-The platform must distinguish between:
-
-1. **Generic healing logic** shared across services.
-2. **Service-specific diagnostics and remediation** implemented through adapters.
-
-The initial supported services are:
+The initial platform will support:
 
 ```text
 EC2
@@ -66,518 +37,369 @@ Lambda
 S3
 ```
 
-The architecture should make it possible to add additional AWS services later without rewriting the core healing engine.
+The platform will eventually be deployed as an AWS-native application using multiple AWS services.
 
 ---
 
-# 3. Goals
+# 2. Core Engineering Principle
 
-## 3.1 Primary Goals
-
-The platform must:
-
-1. Monitor EC2, Lambda, and S3 resources.
-2. Detect predefined unhealthy conditions.
-3. Identify the affected AWS resource.
-4. Collect relevant diagnostic information.
-5. Select an appropriate healing policy.
-6. Execute a service-specific remediation action.
-7. Verify whether remediation succeeded.
-8. Escalate when the initial remediation fails.
-9. Prevent infinite remediation loops.
-10. Record incidents and recovery actions.
-11. Notify operators about important incidents.
-12. Provide an extensible architecture for additional AWS services.
-
----
-
-# 4. Non-Goals
-
-The initial version will not attempt to support every AWS service.
-
-The following are outside the initial scope:
-
-- ECS/EKS self-healing.
-- RDS automated recovery.
-- Auto Scaling policy management.
-- Multi-region disaster recovery.
-- Automatic source-code modification.
-- Machine-learning-based anomaly detection.
-- Full enterprise incident-management systems.
-- Multi-cloud support.
-- Autonomous remediation of arbitrary AWS failures.
-
-Only **explicitly defined and tested healing policies** may perform automatic remediation.
-
----
-
-# 5. Supported AWS Services
-
-## 5.1 EC2
-
-The platform will monitor EC2 instances and applications running on them.
-
-Potential conditions:
-
-- High memory utilization.
-- High disk utilization.
-- Application/process failure.
-- Application health-check failure.
-
-Potential remediation:
-
-- Collect diagnostics.
-- Clean approved temporary files.
-- Restart application/service.
-- Re-run health check.
-- Reboot instance as a last resort.
-
----
-
-## 5.2 Lambda
-
-The platform will monitor Lambda functions.
-
-Potential conditions:
-
-- Abnormally high error rate.
-- Repeated invocation failures.
-- Excessive duration.
-- Function-level operational failure.
-
-Potential remediation may include:
-
-- Inspect CloudWatch metrics and logs.
-- Identify the affected function/version.
-- Roll back to a known-good Lambda version or alias configuration where supported by the configured policy.
-- Restore the expected function configuration.
-- Verify subsequent invocations.
-
-The project must not automatically modify Lambda source code.
-
----
-
-## 5.3 S3
-
-S3 does not behave like a traditional server, so its self-healing model will focus primarily on **configuration and security-policy violations**.
-
-Potential conditions:
-
-- Public access configuration violates the defined policy.
-- Required encryption configuration is missing.
-- Required bucket configuration is missing or incorrect.
-- Required lifecycle/configuration policy is absent.
-
-Potential remediation:
-
-- Restore the required bucket configuration.
-- Reapply the expected security configuration.
-- Verify the resulting bucket state.
-
-S3 remediation must be policy-driven and must not delete objects as part of the initial project.
-
----
-
-# 6. High-Level Architecture
+The system follows:
 
 ```text
-                         AWS ACCOUNT
-                              │
-          ┌───────────────────┼───────────────────┐
-          │                   │                   │
-          ▼                   ▼                   ▼
-        EC2                Lambda                S3
-          │                   │                   │
-          │                   │                   │
-          └──────────────┬────┴────┬──────────────┘
-                         │
-                         ▼
-                  Amazon CloudWatch
-                         │
-                  Metrics / Events
-                         │
-                         ▼
-                    EventBridge
-                         │
-                         ▼
-                 ┌─────────────────┐
-                 │ Healing Engine  │
-                 │                 │
-                 │ Event Processor │
-                 │ Rule Engine     │
-                 │ Diagnosis       │
-                 │ Remediation     │
-                 │ Verification    │
-                 │ Incident Mgmt   │
-                 └────────┬────────┘
-                          │
-                Service Adapter Layer
-                          │
-        ┌─────────────────┼─────────────────┐
-        │                 │                 │
-        ▼                 ▼                 ▼
-   EC2 Adapter       Lambda Adapter     S3 Adapter
-        │                 │                 │
-       SSM          Lambda APIs        S3 APIs
-        │                 │                 │
-        └─────────────────┼─────────────────┘
-                          │
-                          ▼
-                     Verification
-                          │
-                          ▼
-                    Incident Record
-                          │
-                          ▼
-                      Notification
+Detect
+  ↓
+Identify
+  ↓
+Diagnose
+  ↓
+Select Policy
+  ↓
+Remediate
+  ↓
+Verify
+  ↓
+Record
+  ↓
+Notify
+```
+
+The architecture separates:
+
+### Core Healing Engine
+
+Generic logic responsible for:
+
+- Event processing.
+- Policy selection.
+- Incident management.
+- Recovery orchestration.
+- Verification.
+- State management.
+
+### Service Adapters
+
+Service-specific logic responsible for:
+
+- Diagnosis.
+- Remediation.
+- Verification.
+
+Initial adapters:
+
+```text
+EC2Adapter
+LambdaAdapter
+S3Adapter
 ```
 
 ---
 
-# 7. Core Architectural Principle
+# 3. Project Development Strategy
 
-The platform must not contain service-specific logic inside the central healing controller.
+The project will be developed in three major phases.
 
-Instead:
+```text
+PHASE 1
+Build Self-Healing Engine
+        ↓
+PHASE 2
+Build Core Application + Control Plane
+        ↓
+PHASE 3
+AWS Deployment
+```
+
+AWS deployment is intentionally the **final implementation phase**.
+
+The application and healing engine should be functional before the complete AWS infrastructure is deployed.
+
+---
+
+# 4. Phase 1 — Self-Healing Engine
+
+## 4.1 Objective
+
+Build the core healing engine independently of the final AWS deployment architecture.
+
+The engine should implement the fundamental workflow:
+
+```text
+Event
+ ↓
+Normalize
+ ↓
+Identify Resource
+ ↓
+Select Policy
+ ↓
+Diagnose
+ ↓
+Remediate
+ ↓
+Verify
+ ↓
+Record Result
+```
+
+The initial implementation should prioritize correct architecture and recovery logic rather than cloud deployment.
+
+---
+
+# 5. Healing Engine Architecture
+
+```text
+┌─────────────────────────────────────┐
+│          SELF-HEALING ENGINE        │
+├─────────────────────────────────────┤
+│                                     │
+│ Event Processor                      │
+│        ↓                            │
+│ Resource Resolver                    │
+│        ↓                            │
+│ Policy Engine                        │
+│        ↓                            │
+│ Diagnosis Engine                     │
+│        ↓                            │
+│ Remediation Engine                   │
+│        ↓                            │
+│ Verification Engine                  │
+│        ↓                            │
+│ Incident Manager                     │
+│                                     │
+└─────────────────────────────────────┘
+```
+
+The engine must not contain hardcoded EC2/Lambda/S3 logic in the core workflow.
+
+---
+
+# 6. Service Adapter Architecture
+
+Each supported AWS service will implement a common adapter interface.
+
+Conceptually:
+
+```text
+ServiceAdapter
+
+├── diagnose()
+├── remediate()
+└── verify()
+```
+
+Architecture:
 
 ```text
                     Healing Engine
-                         │
-          ┌──────────────┼──────────────┐
-          ▼              ▼              ▼
-     EC2 Adapter     Lambda Adapter   S3 Adapter
+                          │
+          ┌───────────────┼───────────────┐
+          ↓               ↓               ↓
+     EC2 Adapter     Lambda Adapter    S3 Adapter
+          │               │               │
+       EC2 APIs        Lambda APIs       S3 APIs
 ```
 
-The core engine determines:
-
-- What happened?
-- Which resource is affected?
-- Which policy applies?
-- What recovery level should be attempted?
-- Did recovery succeed?
-
-The service adapter determines:
-
-- How to diagnose that service.
-- Which AWS API should be used.
-- Which remediation action is valid.
-- How to verify recovery.
-
-This architecture allows future adapters to be added without redesigning the entire system.
+This allows additional services to be added later without modifying the core healing workflow.
 
 ---
 
-# 8. Event Processing
+# 7. Phase 1 — EC2 Adapter
 
-AWS events and CloudWatch alarms should enter the system through Amazon EventBridge.
+The EC2 adapter should support:
 
-```text
-AWS Service / CloudWatch
-          ↓
-      EventBridge
-          ↓
-    Event Processor
-          ↓
-    Normalize Event
-          ↓
- Identify Resource Type
-          ↓
-   Select Service Adapter
-```
-
-The event processor should normalize incoming events into a common internal representation.
-
-Example:
-
-```text
-IncidentEvent
-├── incidentId
-├── timestamp
-├── service
-├── resourceId
-├── failureType
-├── severity
-└── source
-```
-
----
-
-# 9. Healing Policy Engine
-
-The system should use explicit healing policies.
-
-Example:
-
-```text
-Policy:
-EC2_PROCESS_FAILURE
-
-Condition:
-Application process unavailable
-
-Diagnosis:
-SSM diagnostic script
-
-Remediation:
-Restart application
-
-Verification:
-Application health check
-```
-
-Another example:
-
-```text
-Policy:
-S3_PUBLIC_ACCESS_VIOLATION
-
-Condition:
-Bucket configuration violates policy
-
-Diagnosis:
-Inspect bucket public-access configuration
-
-Remediation:
-Restore required public-access configuration
-
-Verification:
-Re-check bucket configuration
-```
-
-The policy engine should map detected conditions to supported remediation strategies.
-
----
-
-# 10. EC2 Healing
-
-## 10.1 Monitoring
-
-CloudWatch Agent should collect:
+### Diagnosis
 
 - Memory utilization.
 - Disk utilization.
-- Process-level information.
+- Process state.
+- Application health.
+- Relevant system information.
 
-CloudWatch alarms should monitor configured thresholds.
+### Remediation
 
-Example:
+Level 1:
 
 ```text
-Memory > 90%
-       ↓
-CloudWatch Alarm
-       ↓
-EventBridge
+Restart Application
 ```
 
----
-
-## 10.2 EC2 Diagnostic Workflow
-
-When an EC2 incident occurs:
+Level 2:
 
 ```text
-Incident
-   ↓
-Identify Instance
-   ↓
-SSM Diagnostic Command
-   ↓
-Collect:
-   ├── Memory
-   ├── Disk
-   ├── Processes
-   ├── Application Status
-   ├── Uptime
-   └── Relevant Logs
+Safe Temporary-File Cleanup
 ```
 
----
-
-## 10.3 EC2 Remediation Hierarchy
-
-### Level 1 — Application Recovery
-
-Attempt to restart the affected application or worker.
+Level 3:
 
 ```text
-Process Failure
-      ↓
-Restart Service
-      ↓
-Health Check
-```
-
-### Level 2 — Resource Cleanup
-
-For disk/resource exhaustion:
-
-```text
-Resource Exhaustion
-       ↓
-Inspect Safe Temporary Data
-       ↓
-Cleanup
-       ↓
-Verify
-```
-
-### Level 3 — Instance Recovery
-
-If application-level recovery fails:
-
-```text
-Recovery Failed
-      ↓
-Re-check Health
-      ↓
-Still Unhealthy
-      ↓
 EC2 Reboot
-      ↓
-Verify
 ```
 
-A reboot must remain a last-resort action.
+### Verification
+
+- Process running.
+- Application health endpoint responding.
+- Resource utilization returning to acceptable levels.
 
 ---
 
-# 11. Lambda Healing
+# 8. Phase 1 — Lambda Adapter
 
-## 11.1 Monitoring
+The Lambda adapter should support:
 
-CloudWatch should monitor Lambda metrics such as:
+### Diagnosis
 
-- Errors.
-- Invocations.
-- Duration.
-- Throttles where relevant.
-
-Example:
-
-```text
-Lambda Error Rate
-       ↓
-Threshold Exceeded
-       ↓
-CloudWatch
-       ↓
-EventBridge
-```
-
----
-
-## 11.2 Lambda Diagnosis
-
-The Lambda adapter should determine:
-
-- Which function is affected.
-- Which version/alias is serving traffic.
 - Error rate.
-- Recent execution behavior.
-- Relevant CloudWatch logs.
-- Whether a configured known-good version exists.
+- Invocation behavior.
+- Duration.
+- Current function version.
+- Current alias configuration.
+- Known-good version availability.
 
----
+### Remediation
 
-## 11.3 Lambda Remediation
-
-The initial remediation strategy should be based on **known-good deployment states**, rather than attempting to modify application source code.
+The initial strategy should use a known-good deployment state.
 
 Example:
 
 ```text
-Abnormal Lambda Errors
-        ↓
-Identify Function
-        ↓
-Inspect Current Version/Alias
-        ↓
-Known-Good Version Available?
-       / \
-     Yes  No
-      ↓    ↓
-Rollback  Notify
+Current Version
       ↓
-Verify
+Abnormal Errors
+      ↓
+Known-Good Version Available?
+      ↓
+Update Alias / Rollback
 ```
 
----
+The system must not modify Lambda source code automatically.
 
-## 11.4 Lambda Verification
+### Verification
 
-After remediation:
-
-1. Verify the expected version/alias configuration.
-2. Invoke or observe subsequent executions.
-3. Verify that the error condition has recovered.
-4. Record the result.
+- Expected version active.
+- Subsequent invocation succeeds.
+- Error condition recovers.
 
 ---
 
-# 12. S3 Healing
+# 9. Phase 1 — S3 Adapter
 
-## 12.1 Monitoring
+S3 self-healing will focus on configuration and security compliance rather than server-style recovery.
 
-S3 healing will focus on configuration compliance rather than server-style resource recovery.
+### Diagnosis
 
-The platform should periodically or event-drivenly inspect configured S3 buckets.
+Check:
 
-Example:
-
-```text
-S3 Configuration
-       ↓
-Policy Evaluation
-       ↓
-Compliant?
-    /     \
-  Yes      No
-   ↓        ↓
-Healthy   Incident
-```
-
----
-
-## 12.2 S3 Diagnostic Checks
-
-The S3 adapter may inspect:
-
-- Public access block configuration.
+- Public access configuration.
 - Encryption configuration.
-- Lifecycle configuration.
-- Required bucket policy/configuration.
+- Required bucket policy.
+- Required lifecycle/configuration settings.
 
-The exact checks should be defined as configurable policies.
+### Remediation
+
+Restore explicitly defined expected configuration.
+
+### Verification
+
+Re-check the bucket configuration after remediation.
+
+The system must not automatically delete objects.
 
 ---
 
-## 12.3 S3 Remediation
+# 10. Healing Policy Engine
+
+Healing behavior must be represented as explicit policies.
 
 Example:
 
 ```text
-Configuration Violation
-        ↓
-Identify Missing/Incorrect Setting
-        ↓
-Apply Approved Configuration
-        ↓
-Verify Bucket State
+Policy
+├── policyId
+├── serviceType
+├── failureType
+├── severity
+├── diagnosisAction
+├── remediationAction
+├── verificationAction
+├── maxAttempts
+├── cooldown
+└── enabled
 ```
 
-The initial implementation must not automatically delete objects or perform destructive data operations.
+Example:
+
+```text
+EC2_PROCESS_FAILURE
+
+Diagnosis:
+Process Health Check
+
+Remediation:
+Restart Application
+
+Verification:
+Application Health Check
+
+Max Attempts:
+2
+```
+
+The policy engine determines what actions the platform is allowed to perform.
 
 ---
 
-# 13. Verification Engine
+# 11. Recovery Levels
 
-Every remediation action must be followed by verification.
-
-The system must never assume:
+The platform should prefer the least disruptive recovery action.
 
 ```text
-API call succeeded = system recovered
+Level 1
+Application Recovery
+        ↓
+Level 2
+Resource Cleanup / Secondary Recovery
+        ↓
+Level 3
+Infrastructure Recovery
+        ↓
+Level 4
+Human Escalation
+```
+
+Not every service needs all four levels.
+
+For example:
+
+```text
+EC2
+→ Restart Process
+→ Cleanup
+→ Reboot
+→ Escalate
+```
+
+while:
+
+```text
+S3
+→ Restore Configuration
+→ Verify
+→ Escalate
+```
+
+---
+
+# 12. Recovery Verification
+
+Every remediation action must have a corresponding verification step.
+
+The platform must never assume:
+
+```text
+API call succeeded
+=
+System recovered
 ```
 
 Instead:
@@ -593,104 +415,59 @@ Success  Failure
 Resolved  Escalate
 ```
 
-Verification must be service-specific.
-
-Examples:
-
-### EC2
-
-```text
-Process running?
-Health endpoint responding?
-Metrics recovered?
-```
-
-### Lambda
-
-```text
-Correct version active?
-Errors reduced?
-Invocation successful?
-```
-
-### S3
-
-```text
-Expected configuration restored?
-Policy compliant?
-```
-
 ---
 
-# 14. Escalation
+# 13. Idempotency
 
-If the first remediation fails, the system should escalate according to the configured policy.
-
-Example EC2 workflow:
-
-```text
-Process Failure
-      ↓
-Restart Process
-      ↓
-Verify
-      ↓
-Failed
-      ↓
-Cleanup / Secondary Recovery
-      ↓
-Verify
-      ↓
-Failed
-      ↓
-Reboot EC2
-      ↓
-Verify
-      ↓
-Failed
-      ↓
-Notify Operator
-```
-
-Lambda and S3 should have their own service-specific escalation policies.
-
-The platform must never blindly apply EC2-style remediation to another AWS service.
-
----
-
-# 15. Incident Management
-
-Every detected incident should receive a unique ID.
+The engine must prevent duplicate healing operations.
 
 Example:
 
 ```text
-INC-2026-0001
+Event A ──┐
+          ├──→ Same Incident
+Event B ──┘
 ```
 
-Each incident should record:
+Only one healing workflow should own the incident.
+
+The system must support:
+
+- Incident ownership.
+- Recovery attempt limits.
+- State validation.
+- Cooldowns.
+- Idempotent remediation operations.
+
+---
+
+# 14. Incident State Machine
+
+The healing engine should use an explicit incident state machine.
 
 ```text
-Incident ID
-Timestamp
-AWS Service
-Resource ID
-Failure Type
-Severity
-Detection Source
-Diagnostic Result
-Remediation Action
-Verification Result
-Recovery Level
-Final Status
+DETECTED
+   ↓
+DIAGNOSING
+   ↓
+REMEDIATING
+   ↓
+VERIFYING
+   │
+   ├──────────────→ RECOVERED
+   │
+   └──────────────→ ESCALATED
+                         ↓
+                       FAILED
 ```
 
-Possible statuses:
+Possible states:
 
 ```text
 DETECTED
 DIAGNOSING
 REMEDIATING
+VERIFYING
 RECOVERED
 ESCALATED
 FAILED
@@ -698,163 +475,910 @@ FAILED
 
 ---
 
-# 16. Remediation Safety
+# 15. Phase 1 — Engine Testing
 
-Automated infrastructure modification is potentially dangerous.
+Before AWS deployment, the healing engine should be tested using simulated events and service adapters.
 
-The system must therefore implement safety controls.
-
-## Required Controls
-
-### Recovery Attempt Limits
-
-Prevent repeated remediation.
+Example:
 
 ```text
-Maximum attempts = N
+Simulated EC2 Process Failure
+          ↓
+Healing Engine
+          ↓
+EC2 Adapter
+          ↓
+Mock Remediation
+          ↓
+Mock Verification
+          ↓
+Incident Resolved
 ```
 
-### Cooldown
+Tests should cover:
 
-Prevent immediate repeated remediation for the same resource.
+- Successful recovery.
+- Failed recovery.
+- Multiple recovery attempts.
+- Invalid policies.
+- Duplicate events.
+- Concurrent incidents.
+- Verification failure.
+- Escalation.
 
-### Idempotency
-
-Running the same remediation twice should not produce unintended additional changes.
-
-### Explicit Policies
-
-Only registered healing policies may perform automatic remediation.
-
-### Verification
-
-Every remediation must be verified.
-
-### Audit Trail
-
-Every automated action must be recorded.
+The engine should be considered structurally sound before proceeding to the application/control-plane phase.
 
 ---
 
-# 17. Security Requirements
+# 16. Phase 2 — Core Application
 
-The platform must follow least-privilege IAM principles.
+## 16.1 Objective
 
-## Healing Controller
+Build the actual application surrounding the healing engine.
 
-Lambda should receive only the permissions required to:
+The application will provide:
 
-- Read relevant CloudWatch/EventBridge information.
-- Identify resources.
-- Invoke approved remediation APIs.
-- Execute SSM commands where required.
-- Write incident information.
-- Send notifications.
-
-## EC2
-
-The EC2 IAM role should provide only required permissions for:
-
-- CloudWatch Agent.
-- Systems Manager.
-- Required application functionality.
-
-## S3
-
-S3 remediation permissions should be limited to the specific configuration operations supported by the platform.
-
-The system should not use unrestricted administrator permissions simply to simplify development.
+- Resource management.
+- Healing policy management.
+- Incident management.
+- Recovery history.
+- System status.
+- API endpoints.
+- Authentication.
+- Operations dashboard.
 
 ---
 
-# 18. Notification System
+# 17. Control Plane
 
-The platform should notify operators when:
+Amazon DynamoDB will eventually act as the persistent control-plane datastore.
 
-- An incident is detected.
-- Remediation begins.
-- Remediation succeeds.
-- Remediation fails.
-- Escalation occurs.
-- A high-impact recovery action such as EC2 reboot is performed.
-
-Initial notification channel:
+The control plane will store:
 
 ```text
-Slack
+Resources
+Policies
+Incidents
+Recovery Attempts
+System State
+```
+
+Conceptually:
+
+```text
+                 Control Plane
+                       │
+                ┌──────┴──────┐
+                ↓             ↓
+             DynamoDB       Engine
+                │             │
+                ├── Resources │
+                ├── Policies  │
+                ├── Incidents │
+                └── Attempts  │
+```
+
+---
+
+# 18. DynamoDB Data Model
+
+A DynamoDB single-table design may be used.
+
+Example logical structure:
+
+```text
+PK                  SK
+──────────────────────────────────────────────
+RESOURCE#ec2-123    METADATA
+RESOURCE#ec2-123    INCIDENT#2026-0001
+
+RESOURCE#lambda-X   METADATA
+RESOURCE#lambda-X   INCIDENT#2026-0002
+
+RESOURCE#bucket-X   METADATA
+RESOURCE#bucket-X   INCIDENT#2026-0003
+
+INCIDENT#2026-0001  METADATA
+INCIDENT#2026-0001  ATTEMPT#1
+INCIDENT#2026-0001  ATTEMPT#2
+
+POLICY#EC2_PROCESS_FAILURE
+POLICY#LAMBDA_ERROR_RATE
+POLICY#S3_SECURITY_CONFIG
+```
+
+The final physical schema must be based on actual application access patterns.
+
+---
+
+# 19. Core Data Models
+
+## Resource
+
+```text
+resourceId
+serviceType
+region
+resourceArn
+status
+monitoringEnabled
+activeIncidentId
+metadata
+createdAt
+updatedAt
+```
+
+## HealingPolicy
+
+```text
+policyId
+serviceType
+failureType
+severity
+diagnosisAction
+remediationAction
+verificationAction
+maxAttempts
+cooldownSeconds
+enabled
+createdAt
+updatedAt
+```
+
+## Incident
+
+```text
+incidentId
+resourceId
+serviceType
+failureType
+severity
+status
+detectionSource
+detectedAt
+diagnosis
+selectedPolicy
+currentRecoveryLevel
+resolvedAt
+updatedAt
+```
+
+## RecoveryAttempt
+
+```text
+incidentId
+attemptNumber
+action
+recoveryLevel
+startedAt
+completedAt
+result
+diagnosticOutput
+error
+```
+
+---
+
+# 20. DynamoDB Concurrency Control
+
+DynamoDB conditional writes should protect incident state transitions.
+
+Example:
+
+```text
+Incident Status:
+DETECTED
+
+Worker A
+   ↓
+Conditional Update
+DETECTED → DIAGNOSING
+   ↓
+SUCCESS
+
+Worker B
+   ↓
+Conditional Update
+DETECTED → DIAGNOSING
+   ↓
+FAIL
+```
+
+Worker B must not continue with remediation.
+
+This protects the platform against duplicate events and concurrent healing workflows.
+
+---
+
+# 21. Backend API
+
+The application should expose APIs for the operations dashboard and administrative workflows.
+
+Example endpoints:
+
+```text
+GET    /api/resources
+GET    /api/resources/{id}
+
+GET    /api/incidents
+GET    /api/incidents/{id}
+
+GET    /api/policies
+POST   /api/policies
+PUT    /api/policies/{id}
+
+GET    /api/recovery-attempts
+
+GET    /api/health
+GET    /api/metrics
+```
+
+Manual remediation endpoints may be added later, but automatic remediation remains policy-controlled.
+
+---
+
+# 22. Operations Dashboard
+
+The platform should provide an operations dashboard displaying:
+
+```text
+Resources
+├── EC2
+├── Lambda
+└── S3
+
+Incidents
+├── Active
+├── Recovered
+├── Escalated
+└── Failed
+
+Recovery
+├── Attempts
+├── Success Rate
+└── MTTR
 ```
 
 Example:
 
 ```text
-SELF-HEALING INCIDENT
-
-Incident: INC-2026-0001
-Service: EC2
-Resource: i-xxxxxxxx
-Issue: Application process stopped
-
-Action:
-Restart application
-
-Result:
-RECOVERED
-
-Recovery Level:
-1
+┌─────────────────────────────────────────┐
+│      SELF-HEALING CONTROL CENTER        │
+├─────────────────────────────────────────┤
+│                                         │
+│ EC2       ● Healthy                     │
+│ Lambda    ● Healthy                     │
+│ S3        ● Healthy                     │
+│                                         │
+│ Active Incidents: 1                     │
+│ Recoveries Today: 17                    │
+│ Success Rate: 94%                       │
+│ Average MTTR: 38 sec                    │
+│                                         │
+├─────────────────────────────────────────┤
+│ Recent Incidents                         │
+│                                         │
+│ EC2-001  Process Failure    RECOVERED   │
+│ LMB-004  Error Rate         RECOVERED   │
+│ S3-003   Policy Violation   REMEDIATED  │
+└─────────────────────────────────────────┘
 ```
 
 ---
 
-# 19. Observability
+# 23. Authentication and Authorization
 
-The platform itself must be observable.
+The application should eventually use Amazon Cognito.
 
-## Infrastructure Metrics
+Required concepts:
 
-### EC2
+```text
+User
+ ↓
+Cognito
+ ↓
+Authentication
+ ↓
+Authorization
+ ↓
+Operations Dashboard
+```
 
-- Memory utilization.
-- Disk utilization.
-- Process health.
+Possible roles:
 
-### Lambda
+```text
+ADMIN
+OPERATOR
+VIEWER
+```
 
-- Errors.
-- Duration.
-- Invocations.
-- Throttles where relevant.
+Example permissions:
 
-### S3
+### ADMIN
 
-- Policy/configuration compliance status.
+- Manage policies.
+- Register resources.
+- Configure system settings.
 
-## Healing Metrics
+### OPERATOR
 
-The platform should track:
+- View incidents.
+- View recovery history.
+- Trigger approved manual recovery where supported.
 
-- Total incidents.
-- Incidents by service.
-- Successful recoveries.
-- Failed recoveries.
-- Escalated incidents.
-- EC2 reboots.
-- Average recovery time.
-- Recovery success rate.
+### VIEWER
+
+- Read-only access.
 
 ---
 
-# 20. Recovery Metrics
+# 24. Phase 2 — Local / Development Environment
 
-The project should measure:
+Before complete AWS deployment, the core application should be runnable in a controlled development environment.
+
+The development environment should support:
 
 ```text
-Failure Detection Time
+Frontend
+   ↓
+Backend API
+   ↓
+Healing Engine
+   ↓
+Development Database / DynamoDB-compatible environment
+```
+
+The objective is to validate:
+
+- API behavior.
+- Engine integration.
+- Data models.
+- Incident lifecycle.
+- Policy management.
+- Dashboard functionality.
+
+AWS-specific deployment infrastructure should be introduced after the application architecture is stable.
+
+---
+
+# 25. Phase 3 — AWS Deployment
+
+## 25.1 Objective
+
+Deploy the complete application and infrastructure onto AWS.
+
+The deployment phase should be the **final major phase**.
+
+At this point:
+
+```text
+Engine
+   +
+Core Application
+   +
+Database Model
+   +
+Dashboard
+   +
+Service Adapters
+```
+
+should already be functional.
+
+The deployment phase transforms the working system into a production-style AWS architecture.
+
+---
+
+# 26. AWS Deployment Architecture
+
+The final deployment may use:
+
+```text
+                         USERS
+                           │
+                           ▼
+                      CloudFront
+                           │
+                           ▼
+                     S3 Frontend
+                           │
+                           ▼
+                      API Gateway
+                           │
+                           ▼
+                       Cognito
+                           │
+                           ▼
+                  Backend / Lambda
+                           │
+             ┌─────────────┼─────────────┐
+             ▼             ▼             ▼
+         DynamoDB         S3        EventBridge
+             │                           │
+             │                           ▼
+             │                    Healing Engine
+             │                           │
+             │              ┌────────────┼────────────┐
+             │              ▼            ▼            ▼
+             │             EC2        Lambda         S3
+             │              │            │            │
+             │              ▼            ▼            ▼
+             │             SSM       Lambda API     S3 API
+             │
+             └──────────────────────────────┐
+                                            ▼
+                                       CloudWatch
+                                            │
+                                            ▼
+                                        CloudTrail
+                                            │
+                                            ▼
+                                      SNS / SES
+```
+
+The exact architecture should be finalized during deployment based on the requirements discovered during implementation.
+
+---
+
+# 27. AWS Services and Responsibilities
+
+## Application Layer
+
+### Amazon S3
+
+- Host frontend static assets.
+- Store system artifacts where required.
+
+### Amazon CloudFront
+
+- Distribute the frontend.
+- Provide edge delivery.
+
+### API Gateway
+
+- Expose backend APIs.
+- Provide API-level controls.
+
+### Amazon Cognito
+
+- User authentication.
+- Authorization.
+
+---
+
+## Compute
+
+### AWS Lambda
+
+Used for:
+
+- Backend API functions where appropriate.
+- Healing controller.
+- Event processing.
+- Supporting automation.
+
+### Amazon EC2
+
+Used as:
+
+- A monitored/healable infrastructure target.
+- A deliberately failure-prone workload for demonstrating recovery.
+
+---
+
+## Data
+
+### Amazon DynamoDB
+
+Used for:
+
+- Resources.
+- Policies.
+- Incidents.
+- Recovery attempts.
+- Platform state.
+
+### Amazon S3
+
+Used for:
+
+- Frontend hosting.
+- Object storage.
+- S3 self-healing demonstration.
+
+---
+
+## Eventing
+
+### Amazon EventBridge
+
+Used for:
+
+- CloudWatch alarm events.
+- AWS service events.
+- Triggering healing workflows.
+
+### Amazon SQS
+
+May be introduced to buffer healing events and provide asynchronous processing where required.
+
+---
+
+## Workflow
+
+### AWS Step Functions
+
+May be used for complex recovery workflows such as:
+
+```text
+Detect
+ ↓
+Diagnose
+ ↓
+Remediate
+ ↓
+Wait
+ ↓
+Verify
+ ├── Success → Complete
+ └── Failure → Retry / Escalate
+```
+
+Step Functions should only be introduced where workflow orchestration provides a clear advantage over direct Lambda orchestration.
+
+---
+
+## Monitoring
+
+### Amazon CloudWatch
+
+Used for:
+
+- Metrics.
+- Logs.
+- Alarms.
+- Health monitoring.
+
+### CloudWatch Agent
+
+Used on EC2 to collect:
+
+- Memory metrics.
+- Process information.
+- Disk metrics.
+
+### AWS CloudTrail
+
+Used for:
+
+- AWS API audit trails.
+- Tracking infrastructure changes.
+- Investigating unexpected modifications.
+
+---
+
+## Security
+
+### AWS IAM
+
+Used for:
+
+- Least-privilege access.
+- Service roles.
+- Resource permissions.
+
+### AWS KMS
+
+Used for:
+
+- Encryption key management.
+- Encryption of sensitive platform data where appropriate.
+
+### AWS Secrets Manager
+
+Used for:
+
+- Application secrets.
+- Webhook credentials.
+- Other sensitive configuration.
+
+### AWS WAF
+
+May be used to protect the public application/API from common web attacks.
+
+---
+
+## Notifications
+
+### Amazon SNS
+
+Used for:
+
+- Incident notifications.
+- Recovery notifications.
+- Escalation alerts.
+
+SES may be considered for email delivery if direct email functionality is required.
+
+---
+
+# 28. AWS Deployment Security
+
+The deployed platform must follow least-privilege principles.
+
+Requirements:
+
+- No unnecessary administrator permissions.
+- Separate IAM roles for different components.
+- Secrets must not be stored in source code.
+- Sensitive data must use appropriate encryption.
+- Public endpoints must be protected.
+- CloudTrail should be enabled for auditability.
+- S3 buckets should use appropriate public-access controls.
+- DynamoDB should not be publicly accessible.
+
+---
+
+# 29. AWS Infrastructure as Code
+
+The final AWS environment should be reproducible using Infrastructure as Code.
+
+The project may use:
+
+- AWS CDK
+- AWS CloudFormation
+- Terraform
+
+The chosen IaC system should define as much of the final infrastructure as practical.
+
+Example:
+
+```text
+Infrastructure as Code
+│
+├── Networking
+├── IAM
+├── DynamoDB
+├── S3
+├── CloudFront
+├── API Gateway
+├── Cognito
+├── Lambda
+├── EventBridge
+├── CloudWatch
+├── SNS
+└── Other required resources
+```
+
+---
+
+# 30. AWS Deployment Stages
+
+The final deployment should be performed incrementally.
+
+## Stage 1 — Core AWS Data
+
+```text
+DynamoDB
+S3
+IAM
+```
+
+## Stage 2 — Backend
+
+```text
+Lambda
+API Gateway
+```
+
+## Stage 3 — Authentication
+
+```text
+Cognito
+```
+
+## Stage 4 — Monitoring
+
+```text
+CloudWatch
+CloudWatch Agent
+```
+
+## Stage 5 — Eventing
+
+```text
+EventBridge
+SQS where required
+```
+
+## Stage 6 — Healing Targets
+
+```text
+EC2
+Lambda
+S3
+```
+
+## Stage 7 — Healing Orchestration
+
+```text
+Step Functions where required
+```
+
+## Stage 8 — Frontend
+
+```text
+S3
+CloudFront
+```
+
+## Stage 9 — Security / Audit
+
+```text
+IAM
+KMS
+Secrets Manager
+CloudTrail
+WAF where required
+```
+
+## Stage 10 — Notifications
+
+```text
+SNS
+```
+
+---
+
+# 31. End-to-End AWS Flow
+
+A complete EC2 recovery example:
+
+```text
+EC2 Application Failure
+          ↓
+CloudWatch
+          ↓
+CloudWatch Alarm
+          ↓
+EventBridge
+          ↓
+Healing Controller
+          ↓
+DynamoDB
+Create Incident
+          ↓
+Healing Engine
+          ↓
+EC2 Adapter
+          ↓
+SSM
+          ↓
+Restart Application
+          ↓
+Verification
+          ↓
+DynamoDB
+Update Incident
+          ↓
+SNS
+Notification
+```
+
+Lambda example:
+
+```text
+Lambda Error Spike
+        ↓
+CloudWatch
+        ↓
+EventBridge
+        ↓
+Healing Engine
+        ↓
+DynamoDB Incident
+        ↓
+Lambda Adapter
+        ↓
+Rollback / Recovery
+        ↓
+Verification
+        ↓
+DynamoDB
+        ↓
+SNS
+```
+
+S3 example:
+
+```text
+S3 Policy Violation
+        ↓
+Detection
+        ↓
+EventBridge / Scheduled Evaluation
+        ↓
+Healing Engine
+        ↓
+DynamoDB Incident
+        ↓
+S3 Adapter
+        ↓
+Restore Configuration
+        ↓
+Verification
+        ↓
+DynamoDB
+        ↓
+SNS
+```
+
+---
+
+# 32. Failure Simulation Requirements
+
+The final AWS deployment must demonstrate real controlled failures.
+
+## EC2
+
+- Kill application process.
+- Generate controlled memory pressure.
+- Generate controlled disk pressure.
+
+## Lambda
+
+- Deploy a controlled failing version.
+- Trigger abnormal error rate.
+- Verify automatic recovery to known-good version.
+
+## S3
+
+- Introduce a controlled configuration violation.
+- Verify automatic restoration.
+
+All tests must be reversible and must not intentionally damage production data.
+
+---
+
+# 33. Observability
+
+The final system should provide visibility into:
+
+### Infrastructure
+
+- EC2 health.
+- Lambda health.
+- S3 compliance.
+
+### Platform
+
+- Active incidents.
+- Recovery attempts.
+- Failed recoveries.
+- Escalations.
+- MTTR.
+- Recovery success rate.
+
+### Audit
+
+- AWS API activity.
+- Automated remediation actions.
+- Policy changes.
+- Incident state changes.
+
+---
+
+# 34. Recovery Metrics
+
+The platform should calculate:
+
+```text
+Detection Time
 Healing Start Time
 Recovery Completion Time
 ```
 
-The primary recovery metric should be:
+Primary metric:
 
 ```text
 MTTR =
@@ -863,208 +1387,19 @@ Recovery Completion Time
 Failure Detection Time
 ```
 
-The project should demonstrate that automation reduces manual recovery time.
-
----
-
-# 21. Failure Simulation
-
-The project must include controlled failure scenarios.
-
-## 21.1 EC2 Process Failure
+Additional metrics:
 
 ```text
-Kill Application
-      ↓
-CloudWatch Detects
-      ↓
-EventBridge
-      ↓
-Healing Engine
-      ↓
-SSM
-      ↓
-Restart Application
-      ↓
-Health Check
-      ↓
-Recovered
+Recovery Success Rate
+Average Recovery Attempts
+Incidents by Service
+Incidents by Failure Type
+Escalation Rate
 ```
 
 ---
 
-## 21.2 EC2 Memory Pressure
-
-Generate controlled memory pressure.
-
-Expected:
-
-```text
-Memory Threshold
-      ↓
-CloudWatch Alarm
-      ↓
-Healing Engine
-      ↓
-Diagnostics
-      ↓
-Configured Recovery
-      ↓
-Verification
-```
-
----
-
-## 21.3 Lambda Failure
-
-Create a controlled Lambda failure/error condition.
-
-Expected:
-
-```text
-Lambda Errors
-      ↓
-CloudWatch
-      ↓
-EventBridge
-      ↓
-Healing Engine
-      ↓
-Lambda Adapter
-      ↓
-Configured Recovery
-      ↓
-Verification
-```
-
----
-
-## 21.4 S3 Configuration Violation
-
-Intentionally create a controlled policy violation.
-
-Example:
-
-```text
-Required Configuration Removed
-      ↓
-Policy Evaluation
-      ↓
-Violation Detected
-      ↓
-S3 Adapter
-      ↓
-Restore Configuration
-      ↓
-Verify
-```
-
----
-
-# 22. Generic Healing Engine
-
-The central component should expose a generic workflow:
-
-```text
-processEvent(event)
-        ↓
-normalizeEvent()
-        ↓
-identifyResource()
-        ↓
-selectPolicy()
-        ↓
-diagnose()
-        ↓
-selectRemediation()
-        ↓
-executeRemediation()
-        ↓
-verifyRecovery()
-        ↓
-recordIncident()
-        ↓
-notify()
-```
-
-The service adapters should implement the service-specific operations.
-
-Conceptually:
-
-```text
-HealingEngine
-│
-├── EventProcessor
-├── PolicyEngine
-├── IncidentManager
-├── VerificationEngine
-├── NotificationService
-│
-└── ServiceAdapters
-    ├── EC2Adapter
-    ├── LambdaAdapter
-    └── S3Adapter
-```
-
----
-
-# 23. Extensibility
-
-Adding a new AWS service should require adding a new adapter and policies rather than modifying the core healing workflow.
-
-Future example:
-
-```text
-ServiceAdapters
-├── EC2Adapter
-├── LambdaAdapter
-├── S3Adapter
-├── RDSAdapter       # Future
-├── ECSAdapter       # Future
-└── DynamoDBAdapter  # Future
-```
-
-The project should therefore treat the three initial services as the first implementation of a larger architecture.
-
----
-
-# 24. Technology Stack
-
-## AWS
-
-- Amazon EC2
-- AWS Lambda
-- Amazon S3
-- Amazon CloudWatch
-- CloudWatch Agent
-- Amazon EventBridge
-- AWS Systems Manager
-- AWS IAM
-
-## Application
-
-The Healing Engine may be implemented using:
-
-- Python
-- Boto3
-
-Python is preferred for the initial AWS orchestration layer because of its direct integration with the AWS SDK.
-
-## Scripts
-
-- Bash / Shell scripting for EC2 diagnostics and recovery.
-
-## Notifications
-
-- Slack webhook or equivalent notification mechanism.
-
-## Optional Persistence
-
-- DynamoDB for incident history.
-
----
-
-# 25. Repository Structure
+# 35. Repository Structure
 
 ```text
 aws-self-healing-infrastructure/
@@ -1073,10 +1408,11 @@ aws-self-healing-infrastructure/
 │
 ├── engine/
 │   ├── event_processor.py
-│   ├── policy_engine.py
 │   ├── healing_engine.py
+│   ├── policy_engine.py
 │   ├── verification.py
-│   └── incident_manager.py
+│   ├── incident_manager.py
+│   └── state_manager.py
 │
 ├── adapters/
 │   ├── ec2/
@@ -1094,9 +1430,23 @@ aws-self-healing-infrastructure/
 │       ├── diagnostics.py
 │       └── remediation.py
 │
-├── lambda/
-│   └── healing-controller/
-│       └── handler.py
+├── models/
+│   ├── resource.py
+│   ├── incident.py
+│   ├── healing_policy.py
+│   └── recovery_attempt.py
+│
+├── api/
+│   ├── resources.py
+│   ├── incidents.py
+│   ├── policies.py
+│   └── metrics.py
+│
+├── frontend/
+│
+├── database/
+│   ├── schema.md
+│   └── access-patterns.md
 │
 ├── policies/
 │   ├── ec2/
@@ -1104,229 +1454,234 @@ aws-self-healing-infrastructure/
 │   └── s3/
 │
 ├── scripts/
-│   ├── ec2/
-│   │   ├── diagnose.sh
-│   │   ├── restart-service.sh
-│   │   ├── cleanup.sh
-│   │   └── health-check.sh
-│   │
-│   └── tests/
-│
-├── monitoring/
-│   └── cloudwatch-agent-config.json
+│   └── ec2/
+│       ├── diagnose.sh
+│       ├── restart-service.sh
+│       ├── cleanup.sh
+│       └── health-check.sh
 │
 ├── infrastructure/
 │   ├── iam/
-│   ├── cloudwatch/
-│   ├── eventbridge/
-│   ├── ec2/
+│   ├── dynamodb/
+│   ├── s3/
+│   ├── cloudfront/
+│   ├── api-gateway/
+│   ├── cognito/
 │   ├── lambda/
-│   └── s3/
+│   ├── eventbridge/
+│   ├── cloudwatch/
+│   ├── sns/
+│   └── other/
 │
 ├── tests/
-│   ├── ec2/
-│   ├── lambda/
-│   └── s3/
+│   ├── engine/
+│   ├── adapters/
+│   ├── api/
+│   └── integration/
 │
 └── docs/
     ├── architecture.md
     ├── healing-policies.md
+    ├── dynamodb-design.md
     ├── recovery-flows.md
+    ├── aws-deployment.md
     └── incident-examples.md
 ```
 
 ---
 
-# 26. MVP Scope
+# 36. Development Order
 
-The MVP must support all three services.
-
-## EC2
+The project should be implemented in this order:
 
 ```text
-✓ Memory monitoring
-✓ Process monitoring
-✓ Disk monitoring
-✓ Diagnostics
-✓ Application restart
-✓ Safe cleanup
-✓ EC2 reboot as last resort
-✓ Verification
+1. Core Domain Models
+        ↓
+2. Healing Engine
+        ↓
+3. Policy Engine
+        ↓
+4. Incident State Machine
+        ↓
+5. Service Adapters
+        ↓
+6. Engine Tests
+        ↓
+7. DynamoDB Control Plane
+        ↓
+8. Backend API
+        ↓
+9. Operations Dashboard
+        ↓
+10. Authentication / Authorization
+        ↓
+11. Integration Testing
+        ↓
+12. AWS Infrastructure as Code
+        ↓
+13. AWS Deployment
+        ↓
+14. Real AWS Failure Simulation
+        ↓
+15. Observability / Hardening
 ```
 
-## Lambda
+The project should **not start with AWS deployment**.
+
+The AWS environment is the final target environment for the completed platform.
+
+---
+
+# 37. MVP Definition
+
+The MVP consists of three stages.
+
+## Stage A — Engine MVP
 
 ```text
-✓ Error monitoring
-✓ Function diagnosis
-✓ Known-good version/alias detection
-✓ Configured rollback/recovery
+✓ Generic healing workflow
+✓ Policy engine
+✓ Incident state machine
+✓ EC2 adapter
+✓ Lambda adapter
+✓ S3 adapter
 ✓ Verification
-```
-
-## S3
-
-```text
-✓ Configuration compliance checks
-✓ Public-access policy check
-✓ Encryption configuration check
-✓ Configuration remediation
-✓ Verification
-```
-
-## Shared Platform
-
-```text
-✓ EventBridge event processing
-✓ Generic event model
-✓ Healing policy engine
-✓ Service adapter architecture
-✓ Incident tracking
-✓ Recovery limits
+✓ Retry / escalation
 ✓ Idempotency
-✓ Notifications
-✓ Audit logs
+✓ Unit tests
+```
+
+## Stage B — Application MVP
+
+```text
+✓ DynamoDB control plane
+✓ Resource management
+✓ Policy management
+✓ Incident management
+✓ Recovery history
+✓ Backend API
+✓ Operations dashboard
+✓ Authentication
+✓ Integration tests
+```
+
+## Stage C — AWS MVP
+
+```text
+✓ AWS infrastructure
+✓ EventBridge
+✓ CloudWatch
+✓ EC2
+✓ Lambda
+✓ S3
+✓ SSM
+✓ DynamoDB
+✓ API Gateway
+✓ Cognito
+✓ CloudFront
+✓ SNS
+✓ IAM
+✓ CloudTrail
+✓ KMS / Secrets Manager where required
+✓ Infrastructure as Code
+✓ Real failure simulations
 ```
 
 ---
 
-# 27. Success Criteria
-
-The project will be considered successful when it demonstrates all three service-specific recovery workflows.
-
-## EC2
-
-```text
-Failure
- ↓
-Detection
- ↓
-Diagnosis
- ↓
-Application Recovery
- ↓
-Verification
- ↓
-Recovered
-```
-
-## Lambda
-
-```text
-Failure
- ↓
-Detection
- ↓
-Diagnosis
- ↓
-Configured Recovery
- ↓
-Verification
- ↓
-Recovered
-```
-
-## S3
-
-```text
-Configuration Violation
- ↓
-Detection
- ↓
-Diagnosis
- ↓
-Configuration Remediation
- ↓
-Verification
- ↓
-Compliant
-```
-
-Additionally, the same generic healing engine must be capable of orchestrating all three workflows.
-
----
-
-# 28. Definition of Done
+# 38. Definition of Done
 
 The project is complete when:
 
-- EC2, Lambda, and S3 are supported.
-- Each service has at least one working detection policy.
-- Each service has at least one automated remediation policy.
-- Each remediation has a verification step.
-- Events enter through a centralized event-processing workflow.
-- Service-specific logic is isolated inside adapters.
-- IAM permissions follow least privilege.
-- Remediation loops are prevented.
-- Incidents are recorded.
-- Operators receive notifications.
-- Controlled failures have been successfully simulated.
-- Recovery results are documented.
-- The GitHub repository contains architecture and deployment documentation.
+- The generic healing engine works independently of deployment.
+- EC2, Lambda, and S3 adapters are implemented.
+- Each service has at least one detection policy.
+- Each service has at least one remediation policy.
+- Every remediation has a verification step.
+- Incident state is persisted in DynamoDB.
+- Concurrent healing attempts are prevented.
+- Recovery attempts are recorded.
+- The backend API is functional.
+- The operations dashboard is functional.
+- Authentication and authorization are implemented.
+- The complete application is deployed on AWS.
+- AWS infrastructure is reproducible through IaC.
+- CloudWatch monitoring and EventBridge event processing work.
+- Real controlled failures trigger the healing workflow.
+- Successful recovery is verified automatically.
+- Failed recovery is escalated.
+- Notifications are generated.
+- CloudTrail provides an audit trail.
+- The project documents architecture, deployment, failure simulations, and recovery results.
 
 ---
 
-# 29. Future Enhancements
+# 39. Final Architecture
 
-After the initial three-service implementation, possible extensions include:
-
-- RDS adapter.
-- ECS adapter.
-- DynamoDB adapter.
-- Auto Scaling integration.
-- Multi-region recovery.
-- Web-based operations dashboard.
-- Historical incident analytics.
-- Advanced anomaly detection.
-- Human approval workflows for high-risk remediation.
-- Infrastructure-as-Code deployment.
-- Incident-management integrations.
-- Recovery policy versioning.
-
-These are outside the initial implementation scope.
-
----
-
-# 30. Final Product Definition
-
-The final product is an **AWS Self-Healing Infrastructure Platform** that provides a common framework for detecting, diagnosing, remediating, and verifying predefined failures across EC2, Lambda, and S3.
-
-The platform follows:
+The completed platform should conceptually look like:
 
 ```text
-                 AWS Infrastructure
+                         USERS
+                           │
+                           ▼
+                      CloudFront
+                           │
+                           ▼
+                     S3 FRONTEND
+                           │
+                           ▼
+                      API Gateway
+                           │
+                           ▼
+                       Cognito
+                           │
+                           ▼
+                    Backend / Lambda
+                           │
+                           ▼
+                  DynamoDB Control Plane
+                           │
+                           │
+                    ┌──────┴──────┐
+                    │             │
+                    ▼             ▼
+              Application     Healing Engine
+                                   │
+                         ┌─────────┼─────────┐
+                         ▼         ▼         ▼
+                        EC2      Lambda      S3
+                         │         │         │
+                         ▼         ▼         ▼
+                        SSM       APIs       APIs
                          │
-            ┌────────────┼────────────┐
-            ▼            ▼            ▼
-           EC2         Lambda         S3
-            │            │            │
-            └────────────┼────────────┘
-                         ▼
-                  Detection Layer
+                         └─────────┬─────────┘
+                                   │
+                                   ▼
+                              Verification
+                                   │
+                                   ▼
+                              DynamoDB
+                                   │
+                         ┌─────────┴─────────┐
+                         ▼                   ▼
+                        SNS              Dashboard
                          │
                          ▼
-                    EventBridge
-                         │
-                         ▼
-                  Healing Engine
-                         │
-             ┌───────────┼───────────┐
-             ▼           ▼           ▼
-         EC2 Adapter  Lambda      S3 Adapter
-             │         Adapter        │
-             └───────────┼────────────┘
-                         ▼
-                     Remediate
-                         │
-                         ▼
-                      Verify
-                         │
-                         ▼
-                  Incident + Alert
+                    Notifications
+
+
+Monitoring / Audit Layer
+──────────────────────────────────────────
+CloudWatch → EventBridge → Healing Engine
+CloudTrail  → Audit Trail
+IAM         → Authorization
+KMS         → Encryption
+Secrets Manager → Secrets
+WAF         → Edge/API Protection
 ```
 
-The central engineering principle is:
+The core architectural principle remains:
 
-> **One generic healing workflow, with service-specific diagnosis and remediation adapters.**
+> **Build the healing engine first, build the application around it second, and deploy the completed platform onto AWS last.**
 
-This allows the platform to demonstrate both **AWS service knowledge** and **software architecture/design skills**, rather than being a collection of unrelated automation scripts.
+AWS is therefore not the starting point of the project. **AWS is the final production environment in which the completed self-healing platform operates.**
